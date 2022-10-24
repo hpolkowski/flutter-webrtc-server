@@ -250,6 +250,16 @@ func (s *Signaler) HandleNewWebSocket(conn *websocket.WebSocketConn, request *ht
 					s.Send(conn, msg)
 					return
 				}
+
+				for _, ogpeer := range s.peers {
+					if ogpeer.conn == conn {
+						s.sessions[to+"-"+ogpeer.info.ID] = Session{
+							from: ogpeer,
+							to:   peer,
+						}
+					}
+				}
+
 				s.Send(peer.conn, request)
 			}
 			break
@@ -288,6 +298,9 @@ func (s *Signaler) HandleNewWebSocket(conn *websocket.WebSocketConn, request *ht
 					s.Send(conn, msg)
 					return
 				}
+
+				delete(s.sessions, bye.SessionID)
+
 				bye := Request{
 					Type: "bye",
 					Data: map[string]interface{}{
@@ -317,11 +330,29 @@ func (s *Signaler) HandleNewWebSocket(conn *websocket.WebSocketConn, request *ht
 		for _, peer := range s.peers {
 			if peer.conn == conn {
 				peerID = peer.info.ID
-			} else {
+			}
+		}
+
+		logger.Infof("Sessions %v", s.sessions)
+
+		for _, session := range s.sessions {
+			if session.to.info.ID == peerID {
+				var peer = session.from
 				leave := Request{
 					Type: "leave",
 					Data: peer.info.ID,
 				}
+				delete(s.sessions, session.id)
+				s.Send(peer.conn, leave)
+			}
+
+			if session.from.info.ID == peerID {
+				var peer = session.to
+				leave := Request{
+					Type: "leave",
+					Data: peer.info.ID,
+				}
+				delete(s.sessions, session.id)
 				s.Send(peer.conn, leave)
 			}
 		}
