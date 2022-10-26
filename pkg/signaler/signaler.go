@@ -250,13 +250,24 @@ func (s *Signaler) HandleNewWebSocket(conn *websocket.WebSocketConn, request *ht
 					s.Send(conn, msg)
 					return
 				}
-
-				for _, ogpeer := range s.peers {
-					if ogpeer.conn == conn {
-						s.sessions[to+"-"+ogpeer.info.ID] = Session{
-							from: ogpeer,
-							to:   peer,
-						}
+				from := negotiation.From
+				ogpeer, ok := s.peers[from]
+				if !ok {
+					msg := Request{
+						Type: "error",
+						Data: Error{
+							Request: string(request.Type),
+							Reason:  "Peer [" + from + "] not found ",
+						},
+					}
+					s.Send(conn, msg)
+					return
+				}
+				_, ok = s.sessions[negotiation.SessionID]
+				if !ok {
+					s.sessions[negotiation.SessionID] = Session{
+						from: ogpeer,
+						to:   peer,
 					}
 				}
 
@@ -299,8 +310,6 @@ func (s *Signaler) HandleNewWebSocket(conn *websocket.WebSocketConn, request *ht
 					return
 				}
 
-				delete(s.sessions, bye.SessionID)
-
 				bye := Request{
 					Type: "bye",
 					Data: map[string]interface{}{
@@ -310,6 +319,8 @@ func (s *Signaler) HandleNewWebSocket(conn *websocket.WebSocketConn, request *ht
 				}
 				s.Send(peer.conn, bye)
 			}
+
+			delete(s.sessions, bye.SessionID)
 
 			// send to aleg
 			sendBye(ids[0])
@@ -333,34 +344,38 @@ func (s *Signaler) HandleNewWebSocket(conn *websocket.WebSocketConn, request *ht
 			}
 		}
 
-		logger.Infof("Sessions %v", s.sessions)
-
-		for _, session := range s.sessions {
-			if session.to.info.ID == peerID {
-				var peer = session.from
-				leave := Request{
-					Type: "leave",
-					Data: peer.info.ID,
-				}
-				delete(s.sessions, session.id)
-				s.Send(peer.conn, leave)
-			}
-
-			if session.from.info.ID == peerID {
-				var peer = session.to
-				leave := Request{
-					Type: "leave",
-					Data: peer.info.ID,
-				}
-				delete(s.sessions, session.id)
-				s.Send(peer.conn, leave)
-			}
-		}
-
 		logger.Infof("Remove peer %s", peerID)
 		if peerID == "" {
 			logger.Infof("Leve peer id not found")
 			return
+		} else {
+			logger.Infof("Sessions %v", s.sessions)
+
+			for _, session := range s.sessions {
+				if session.to.info.ID == peerID {
+					delete(s.sessions, session.id)
+
+					logger.Infof("Delete session %s", session.id)
+					var peer = session.from
+					leave := Request{
+						Type: "leave",
+						Data: peer.info.ID,
+					}
+					s.Send(peer.conn, leave)
+				}
+
+				if session.from.info.ID == peerID {
+					delete(s.sessions, session.id)
+
+					logger.Infof("Delete session %s", session.id)
+					var peer = session.to
+					leave := Request{
+						Type: "leave",
+						Data: peer.info.ID,
+					}
+					s.Send(peer.conn, leave)
+				}
+			}
 		}
 		delete(s.peers, peerID)
 
