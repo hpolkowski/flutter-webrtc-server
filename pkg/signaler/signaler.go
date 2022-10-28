@@ -349,13 +349,11 @@ func (s *Signaler) HandleNewWebSocket(conn *websocket.WebSocketConn, request *ht
 			logger.Infof("Leve peer id not found")
 			return
 		} else {
-			logger.Infof("Sessions %v", s.sessions)
-
 			for _, session := range s.sessions {
 				if session.to.info.ID == peerID {
-					delete(s.sessions, session.id)
-
-					logger.Infof("Delete session %s", session.id)
+					var sessionID = session.id
+					logger.Infof("Delete session %s", sessionID)
+					delete(s.sessions, sessionID)
 					var peer = session.from
 					leave := Request{
 						Type: "leave",
@@ -365,9 +363,9 @@ func (s *Signaler) HandleNewWebSocket(conn *websocket.WebSocketConn, request *ht
 				}
 
 				if session.from.info.ID == peerID {
-					delete(s.sessions, session.id)
-
-					logger.Infof("Delete session %s", session.id)
+					var sessionID = session.id
+					logger.Infof("Delete session %s", sessionID)
+					delete(s.sessions, sessionID)
 					var peer = session.to
 					leave := Request{
 						Type: "leave",
